@@ -1,0 +1,12 @@
+[theme]
+# 主色调 - 这里的颜色叫“群青”
+primaryColor = "#0a90f7ff"
+
+# 背景色 - 这里的颜色叫“云峰白”，一种极淡的蓝灰色，不刺眼
+backgroundColor = "#f7f9fa"
+
+# 侧边栏背景 - “月白”
+secondaryBackgroundColor = "#eaf4fc"
+
+# 文字颜色 - 深灰，比纯黑更柔和
+textColor = "#2c3e50"
