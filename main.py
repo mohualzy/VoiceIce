@@ -6,6 +6,7 @@ import ui_components   # 导入我们的UI组件
 import io
 import datetime
 import tempfile
+import os
 
 # 使用装饰器，并添加一个友好的加载提示动画
 @st.cache_data(show_spinner="⏳ 正在凝结底层冰晶 (解码音频)...")
@@ -27,6 +28,23 @@ def load_audio_from_bytes(audio_bytes):
 # 1. 页面设置
 st.set_page_config(page_title="言冰 Voiceice", page_icon="🧊", layout="wide")
 
+# 定义本地物理金库的文件夹路径
+VAULT_DIR = "local_ice_vault"
+
+# 如果该文件夹不存在，则自动在当前目录下创建它
+if not os.path.exists(VAULT_DIR):
+    os.makedirs(VAULT_DIR)
+
+# --- 核心状态机初始化与本地数据恢复 ---
+if 'audio_vault' not in st.session_state:
+    st.session_state['audio_vault'] = {}
+    
+    # 开机自检：遍历本地文件夹，将历史遗留的音频流全部加载回内存
+    for filename in os.listdir(VAULT_DIR):
+        file_path = os.path.join(VAULT_DIR, filename)
+        if os.path.isfile(file_path):
+            with open(file_path, "rb") as f:
+                st.session_state['audio_vault'][filename] = f.read()
 # 2. 初始化 
 if 'audio_vault' not in st.session_state:
     # 核心金库：{"文件名": 纯二进制数据}
@@ -43,26 +61,36 @@ if 'last_upload_id' not in st.session_state:
 uploaded_file, recorded_audio_bytes = ui_components.render_sidebar_inputs()
 
 # 3. 核心路由逻辑，及时更新后台金库 
+# 场景A：产生了新的有效录音
 if recorded_audio_bytes is not None and recorded_audio_bytes != st.session_state['last_record_bytes']:
     st.session_state['last_record_bytes'] = recorded_audio_bytes
-    time_str = datetime.datetime.now().strftime("%H:%M:%S")
+    time_str = datetime.datetime.now().strftime("%H_%M_%S") # 避免文件名中出现操作系统不允许的冒号
     new_name = f"即兴心声_{time_str}.wav"
+    
+    # 1. 存入内存金库
     st.session_state['audio_vault'][new_name] = recorded_audio_bytes
     st.session_state['current_target'] = new_name
-
-elif uploaded_file is not None:
-    # 提取当前上传文件的唯一特征 (名称_大小)
-    current_upload_id = f"{uploaded_file.name}_{uploaded_file.size}"
     
-    # 核心拦截逻辑: 仅当特征改变时, 才说明是全新的物理上传动作
+    # 2. 物理落盘备份
+    with open(os.path.join(VAULT_DIR, new_name), "wb") as f:
+        f.write(recorded_audio_bytes)
+
+# 场景B：检测到新的上传文件
+elif uploaded_file is not None:
+    current_upload_id = f"{uploaded_file.name}_{uploaded_file.size}"
     if current_upload_id != st.session_state['last_upload_id']:
         st.session_state['last_upload_id'] = current_upload_id
         new_name = uploaded_file.name
         
-        # 直接写入/覆盖金库
-        st.session_state['audio_vault'][new_name] = uploaded_file.getvalue()
+        raw_bytes = uploaded_file.getvalue()
+        
+        # 1. 存入内存金库
+        st.session_state['audio_vault'][new_name] = raw_bytes
         st.session_state['current_target'] = new_name
-
+        
+        # 2. 物理落盘备份
+        with open(os.path.join(VAULT_DIR, new_name), "wb") as f:
+            f.write(raw_bytes)
 # 4. 渲染侧边栏的历史记录组件 
 selected_history, delete_triggered, files_to_delete = ui_components.render_sidebar_history()
 
@@ -72,15 +100,19 @@ if selected_history is not None:
     
 if delete_triggered and files_to_delete:
     for name in files_to_delete:
-        # 1. 内存释放：从字典中彻底删除该键值对
+        # 1. 内存释放
         if name in st.session_state['audio_vault']:
             del st.session_state['audio_vault'][name]
         
-        # 2. 游标安全校验：如果正在播放的文件被删了，必须将游标清空
+        # 2. 游标安全校验
         if st.session_state['current_target'] == name:
             st.session_state['current_target'] = None
+            
+        # 3. 硬盘物理抹除
+        file_path = os.path.join(VAULT_DIR, name)
+        if os.path.exists(file_path):
+            os.remove(file_path) # 调用系统接口删除文件
     
-    # 3. 强制页面重载：数据清理完毕后，立刻刷新前端画面
     st.rerun()
 
 # 5. 渲染主界面并执行底层信号处理
