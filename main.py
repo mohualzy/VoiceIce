@@ -18,6 +18,8 @@ if 'current_target' not in st.session_state:
     st.session_state['current_target'] = None
 if 'last_record_bytes' not in st.session_state:
     st.session_state['last_record_bytes'] = None
+if 'last_upload_id' not in st.session_state:
+    st.session_state['last_upload_id'] = None
 
 
 uploaded_file, recorded_audio_bytes = ui_components.render_sidebar_inputs()
@@ -30,10 +32,18 @@ if recorded_audio_bytes is not None and recorded_audio_bytes != st.session_state
     st.session_state['audio_vault'][new_name] = recorded_audio_bytes
     st.session_state['current_target'] = new_name
 
-elif uploaded_file is not None and uploaded_file.name not in st.session_state['audio_vault']:
-    new_name = uploaded_file.name
-    st.session_state['audio_vault'][new_name] = uploaded_file.getvalue()
-    st.session_state['current_target'] = new_name
+elif uploaded_file is not None:
+    # 提取当前上传文件的唯一特征 (名称_大小)
+    current_upload_id = f"{uploaded_file.name}_{uploaded_file.size}"
+    
+    # 核心拦截逻辑: 仅当特征改变时, 才说明是全新的物理上传动作
+    if current_upload_id != st.session_state['last_upload_id']:
+        st.session_state['last_upload_id'] = current_upload_id
+        new_name = uploaded_file.name
+        
+        # 直接写入/覆盖金库
+        st.session_state['audio_vault'][new_name] = uploaded_file.getvalue()
+        st.session_state['current_target'] = new_name
 
 # 4. 渲染侧边栏的历史记录组件 
 selected_history, delete_triggered, files_to_delete = ui_components.render_sidebar_history()
