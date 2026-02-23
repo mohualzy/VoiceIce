@@ -112,18 +112,18 @@ def render_tabs_content(y_original, y_processed, sr, temperature):
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**🧊 初结之冰 (Original)**")
-            # 调用 utils 里的绘图函数
-            fig = utils.draw_waveform(y_original, sr, "Frozen Shape", "#87CEFA")
-            st.pyplot(fig) # 绘图
-            st.audio(y_original, sample_rate=sr) # 播放原声
+            # 切换为调用新的 plotly 绘制函数
+            fig1 = utils.draw_waveform_plotly(y_original, sr, "Frozen Shape", "#87CEFA")
+            # 使用 st.plotly_chart 渲染，并接管容器宽度
+            st.plotly_chart(fig1, use_container_width=True) 
+            st.audio(y_original, sample_rate=sr) 
             
         with c2:
             st.markdown(f"**💧 春水初生 (Temp: {temperature})**")
             plot_color = "#FF7F50" if temperature > 1.0 else "#40E0D0"
-            fig2 = utils.draw_waveform(y_processed, sr, "Flowing Shape", plot_color)
-            st.pyplot(fig2)
+            fig2 = utils.draw_waveform_plotly(y_processed, sr, "Flowing Shape", plot_color)
+            st.plotly_chart(fig2, use_container_width=True)
             
-            # 播放处理后的音频
             virtual_file = io.BytesIO()
             sf.write(virtual_file, y_processed, sr, format='WAV')
             st.audio(virtual_file, format='audio/wav')

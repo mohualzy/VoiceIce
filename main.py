@@ -5,7 +5,25 @@ import utils           # 导入我们的工具箱
 import ui_components   # 导入我们的UI组件
 import io
 import datetime
+import tempfile
 
+# 使用装饰器，并添加一个友好的加载提示动画
+@st.cache_data(show_spinner="⏳ 正在凝结底层冰晶 (解码音频)...")
+def load_audio_from_bytes(audio_bytes):
+    """
+    将二进制音频流解码为 NumPy 数组。
+    由于有 @st.cache_data 护航，相同的 audio_bytes 只会被解码一次。
+    """
+    # 使用 tempfile 在系统临时目录安全地创建一个无名文件，避免多线程冲突
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+        
+    # 执行极其耗时的解码操作
+    y, sr = librosa.load(tmp_path, sr=None)
+    
+    # 返回解码后的纯净数据
+    return y, sr
 # 1. 页面设置
 st.set_page_config(page_title="言冰 Voiceice", page_icon="🧊", layout="wide")
 
@@ -71,17 +89,19 @@ target_name = st.session_state.get('current_target')
 
 if target_name and target_name in st.session_state['audio_vault']:
     try:
+        # 1. 拿到纯净的二进制数据
         raw_bytes = st.session_state['audio_vault'][target_name]
         
-        temp_path = "temp_processing.wav"
-        with open(temp_path, "wb") as f:
-            f.write(raw_bytes)
-            
-        y, sr = librosa.load(temp_path, sr=None)
+        # 2. 调用缓存函数！
+        # 只要你还在处理同一个音频 (raw_bytes 没变)，滑动温度条时这里将瞬间执行完毕，耗时几乎为 0 毫秒！
+        y, sr = load_audio_from_bytes(raw_bytes)
         
         st.markdown(f"**当前聆听:** `{target_name}`")
         
+        # 3. 实时渲染控制区
         temperature = ui_components.render_controls()
+        
+        # 4. DSP 引擎处理 (这部分是纯内存 NumPy 矩阵运算，非常快，不需要缓存)
         y_processed = utils.process_audio_speed_and_pitch(y, temperature, sr)
         
         ui_components.render_tabs_content(y, y_processed, sr, temperature)

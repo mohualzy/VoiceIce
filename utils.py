@@ -3,6 +3,7 @@ import librosa.display
 import scipy.signal as signal
 import numpy as np
 import matplotlib.pyplot as plt 
+import plotly.graph_objects as go
 # ==========================================
 # 【第一部分：核心后端算法】 
 # 核心数值计算库
@@ -147,21 +148,50 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
 # 【第二部分：绘图逻辑函数】 - 负责后端的“画图”动作
 # ==========================================
 
-def draw_waveform(y, sr, title, color):
-    """绘制波形图,返回Matplotlib画布对象"""
-    plt.style.use('default')    # 重置绘图样式
-    fig, ax = plt.subplots(figsize=(10, 3))  #创建一个画布（Figure）和一个子图（Axes）
+def draw_waveform_plotly(y: np.ndarray, sr: int, title: str, color: str):
+    """
+    使用 Plotly 绘制交互式波形图 (自带降采样防御机制)
+    """
+    # 1. 内存防御：计算降采样步长 (Stride)
+    max_points = 2000
+    total_points = len(y)
     
-    time = np.linspace(0, len(y) / sr, len(y))  #生成与音频时长相匹配的时间轴
+    if total_points > max_points:
+        step = total_points // max_points
+        # 类似 C 语言的循环步长遍历，Python 的切片语法 y[start:stop:step]
+        y_downsampled = y[::step] 
+    else:
+        y_downsampled = y
+        
+    # 生成对应的时间轴
+    time_axis = np.linspace(0, total_points / sr, len(y_downsampled))
     
-    ax.plot(time, y, color=color, linewidth=1)  #在子图上绘制折线图
-    ax.set_title(title, fontsize=12, pad=10)  #为子图设置标题
-    ax.set_xlabel("Time (s)", fontsize=10)   #x轴坐标轴标签为时间9(秒)
-    ax.set_ylabel("Amplitude", fontsize=10)  #y轴坐标轴标签为幅度
-    ax.set_xlim(0, len(y) / sr)   #设定x轴范围
-    ax.grid(True, alpha=0.3)   #添加网格线，透明度为0.3
-    plt.tight_layout() #自动调整布局
-    return fig #返回画布图像
+    # 2. 构建面向前端的轻量化图表对象
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=time_axis,
+        y=y_downsampled,
+        mode="lines",
+        line=dict(color=color, width=1.5),
+        name="Amplitude",
+        hoverinfo="none" # 关闭鼠标悬停气泡，极限压榨渲染性能
+    ))
+    
+    # 3. 剥离冗余 UI，设定绝对坐标系
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=14)),
+        xaxis_title="Time (s)",
+        yaxis_title="Amplitude",
+        height=220, # 配合侧边栏压低高度
+        margin=dict(l=10, r=10, t=40, b=10), # 极简化边缘留白
+        plot_bgcolor="rgba(0,0,0,0)", # 透明背景，融入网页主题
+        paper_bgcolor="rgba(0,0,0,0)"
+    )
+    
+    # 锁定 Y 轴振幅的物理边界，防止拖动温度时波形图忽大忽小
+    fig.update_yaxes(range=[-1.0, 1.0])
+    
+    return fig
 
 def draw_spectrogram(y, sr, title):
     """绘制声谱图,返回Matplotlib画布对象"""
