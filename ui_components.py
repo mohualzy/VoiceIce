@@ -33,7 +33,7 @@ def render_sidebar():
         else:
             st.caption("惟有风雪立空庭...") # 小文案💖，表示历史记录为空
             
-    return uploaded_file,uploaded_file
+    return uploaded_file, recorded_audio_bytes
 
 def render_header():
     """渲染主标题区"""
