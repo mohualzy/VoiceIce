@@ -86,8 +86,8 @@ def apply_lowpass_filter(audio_series: np.ndarray, sr: int, cutoff_freq: float) 
     # 防止截止频率设置过高导致归一化后溢出
     normal_cutoff = np.clip(normal_cutoff, 0.01, 0.99)
     
-    # 3. 设计一个 5 阶的巴特沃斯滤波器 (阶数越高，过滤边缘越陡峭、越干净利落)
-    b, a = signal.butter(5, normal_cutoff, btype='low', analog=False)
+    # 3. 设计一个 3 阶的巴特沃斯滤波器 (阶数越高，过滤边缘越陡峭、越干净利落)
+    b, a = signal.butter(3, normal_cutoff, btype='low', analog=False)
     
     # 4. 应用滤波器。使用 filtfilt 可以进行正反向两次滤波，保证波形不发生相位偏移
     filtered_audio = signal.filtfilt(b, a, audio_series)
@@ -101,18 +101,38 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
     """
     current_audio = audio_series
 
+    # 速度: UI的0.5~2.0 映射为真实的 0.85倍速 ~ 1.25倍速
+    real_rate = 1.0 + (temperature - 1.0) * 0.25
+    
+    # 音高: UI的0.5~2.0 映射为真实的 -1.0半音 ~ +1.5半音
+    real_pitch = (temperature - 1.0) * 1.5
+    
+    # 响度(增益): UI的0.5~2.0 映射为 0.7倍音量 ~ 1.4倍音量
+    gain = 1.0 + (temperature - 1.0) * 0.4
+    
     # 1. 温度低于 1.0 (温火煮化)：启动低通滤波器削弱高频
     if temperature < 1.0:
         # 建立映射：温度 0.5 时截止频率约为 2500Hz (非常沉闷)，温度 0.9 时约为 6500Hz (略微柔和)
         # 人类语音的有效能量集中在 300Hz - 3400Hz，保留这一段就能听清内容
-        target_cutoff = 2500 + (temperature - 0.5) * 10000 
+        target_cutoff = 4500 + (temperature - 0.5) * 10000 
         current_audio = apply_lowpass_filter(current_audio, sr, target_cutoff)
 
-    # 2. 调整速度 (调用你原有的函数，假设你已经修复了上一次的逻辑漏洞)
-    current_audio = process_audio_speed_by_temp(current_audio, temperature)
+    # === 时域与音高处理 ===
+    # 注意：librosa处理过多会损伤音质，这里合并调用并做好异常捕获
+    try:
+        if real_rate != 1.0:
+            current_audio = librosa.effects.time_stretch(y=current_audio, rate=real_rate)
+        if real_pitch != 0.0:
+            current_audio = librosa.effects.pitch_shift(y=current_audio, sr=sr, n_steps=real_pitch)
+    except Exception as e:
+        print(f"DSP引擎处理异常: {e}")
+        return audio_series
     
-    # 3. 调整音高 (调用你原有的函数)
-    current_audio = process_audio_pitch_by_temp(current_audio, temperature)
+    # === 响度处理 ===
+    current_audio = current_audio * gain
+    
+    # 防止放大后音频波形溢出(Clipping)，导致爆音
+    current_audio = np.clip(current_audio, -1.0, 1.0)
     
     return current_audio   #返回处理后（改变音速、音高）的音频
 
