@@ -23,14 +23,25 @@ ui_components.render_header()
 audio_source = None
 file_name_for_history = ""
 
+if 'last_record_bytes' not in st.session_state:
+    st.session_state['last_record_bytes'] = None
+if 'last_record_name' not in st.session_state:
+    st.session_state['last_record_name'] = ""
+
 if recorded_audio_bytes is not None:
-    # 用 io.BytesIO 包装字节流，并强制将读取指针归零
-    audio_source = io.BytesIO(recorded_audio_bytes)
-    audio_source.seek(0) 
+    # 只有当录音内容发生物理变化时，才生成新的时间戳文件名
+    if recorded_audio_bytes != st.session_state['last_record_bytes']:
+        st.session_state['last_record_bytes'] = recorded_audio_bytes
+        time_str = datetime.datetime.now().strftime("%H:%M:%S")
+        st.session_state['last_record_name'] = f"即兴心声_{time_str}.wav"
     
-    # 利用当前时间生成绝对不重复的虚拟文件名，确保能被历史记录收录
-    time_str = datetime.datetime.now().strftime("%H:%M:%S")
-    file_name_for_history = f"即兴心声_{time_str}.wav"
+    file_name_for_history = st.session_state['last_record_name']
+    
+    # 将内存字节流写入物理文件，避开 librosa 的内存解码陷阱
+    temp_path = "temp_live_record.wav"
+    with open(temp_path, "wb") as f:
+        f.write(recorded_audio_bytes)
+    audio_source = temp_path
 
 elif uploaded_file is not None:
     audio_source = uploaded_file

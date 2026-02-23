@@ -11,16 +11,16 @@ def render_sidebar():
         st.header("📂 拾遗冰窖") # 文件存放位置命名得文雅一点❤️
         uploaded_file = st.file_uploader("采撷一段寒语 (wav/mp3)", type=["wav", "mp3"]) # 上传文件存进uploaded_file变量
         st.divider();
-        # --- 替换 ui_components.py 中原有的录音组件区块 ---
         st.subheader("🎙️ 现场采音")
-        st.caption("(点击麦克风开始录音，再次点击结束)") # 明确的操作指引
+        st.caption("(点击麦克风开始录音，再次点击结束)")
         
-        # 增加色彩的绝对反差，让状态肉眼可见
         recorded_audio_bytes = audio_recorder(
             text=" 录音", 
-            recording_color="#FF0000", # 绝对纯红，代表正在录音
-            neutral_color="#808080",   # 灰色，代表待机
-            icon_size="2x"
+            recording_color="#FF0000", 
+            neutral_color="#808080", 
+            icon_size="2x",
+            energy_threshold=(-1.0, 1.0), # 关闭自动静音检测
+            pause_threshold=60.0          # 将最大允许录音时长设为 60 秒
         )
         st.divider()  # 分割线
         st.subheader("🗂️ 流年冰迹")  # 历史记录的命名
