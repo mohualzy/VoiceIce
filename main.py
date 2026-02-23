@@ -45,7 +45,7 @@ if uploaded_file is not None:
         ui_components.render_tabs_content(y, y_processed, sr, temperature)
         
     except Exception as e:
-        print("再试一试呢?")
+        st.error(f"烹煮过程中火候失控了，请检查音频文件格式是否正确。(错误信息: {e})")
 
 else:
     st.info("👈 请在左侧侧边栏【拾遗冰窖】中上传录音文件，开始体验。")

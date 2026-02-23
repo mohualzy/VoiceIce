@@ -21,8 +21,8 @@ def process_audio_speed_by_temp(audio_series: np.ndarray, temperature: float) ->
     # 1. 定义映射逻辑: 将温度映射为播放速率 (rate)
     # 假设 20度是 1.0倍速。每升高 10度，速度增加 10%
     # 公式: rate = 1.0 + (temp - 20) * 0.01
-    rate = 1.0 + (temperature - 20.0) * 0.01
-    if (temperature == 1.0):
+    rate = temperature
+    if (rate == 1.0):
         return audio_series
     
     # 2. 边界保护: Librosa 要求 rate 必须 > 0
@@ -48,7 +48,7 @@ def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float) ->
     # 1. 定义映射逻辑: 将温度映射为半音 (n_steps)
     # 假设 20度是原调。
     # 温度每变化 5度，音高变化 1 个半音 (semitone)
-    n_steps = (temperature - 20.0) / 5.0  #音高变化的半音步数
+    n_steps = (temperature - 1.0) * 10.0  #音高变化的半音步数
     if (temperature == 1.0):
         return audio_series
     
