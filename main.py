@@ -4,6 +4,7 @@ import librosa
 import utils           # 导入我们的工具箱
 import ui_components   # 导入我们的UI组件
 import io
+import datetime
 
 # 1. 页面设置
 st.set_page_config(page_title="言冰 Voiceice", page_icon="🧊", layout="wide")
@@ -23,18 +24,21 @@ audio_source = None
 file_name_for_history = ""
 
 if recorded_audio_bytes is not None:
-    # 如果用户按了麦克风录音
+    # 用 io.BytesIO 包装字节流，并强制将读取指针归零
     audio_source = io.BytesIO(recorded_audio_bytes)
-    file_name_for_history = "现场即兴录音"
+    audio_source.seek(0) 
+    
+    # 利用当前时间生成绝对不重复的虚拟文件名，确保能被历史记录收录
+    time_str = datetime.datetime.now().strftime("%H:%M:%S")
+    file_name_for_history = f"即兴心声_{time_str}.wav"
+
 elif uploaded_file is not None:
-    # 如果用户上传了文件
     audio_source = uploaded_file
     file_name_for_history = uploaded_file.name
 
-# 如果有音频来源，就开始处理
+# 执行处理流水线
 if audio_source is not None:
     try:
-        # librosa 可以直接读取 BytesIO 对象
         y, sr = librosa.load(audio_source, sr=None)
         
         temperature = ui_components.render_controls()
@@ -56,4 +60,4 @@ if audio_source is not None:
         st.error(f"处理音频时遇到干扰: {e}")
 
 else:
-    st.info("👈 请在左侧【拾遗冰窖】上传文件，或使用【现场采音】功能开始体验。")
+    st.info("👈 请在左侧拾遗冰窖上传文件，或点击麦克风录制现场心声。")
