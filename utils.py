@@ -1,5 +1,6 @@
 import librosa
 import librosa.display
+import scipy.signal as signal
 import numpy as np
 import matplotlib.pyplot as plt 
 # ==========================================
@@ -67,17 +68,53 @@ def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float) ->
         return audio_series
     return processed_data
 
+def apply_lowpass_filter(audio_series: np.ndarray, sr: int, cutoff_freq: float) -> np.ndarray:
+    """
+    使用巴特沃斯低通滤波器 (Butterworth Low-pass Filter) 削弱刺耳的高频信号。
+    
+    Args:
+        audio_series: 音频时间序列
+        sr: 采样率
+        cutoff_freq: 截止频率 (Hz)。高于此频率的信号将被大幅削弱。
+    """
+    # 1. 计算奈奎斯特频率 (Nyquist frequency)，理论上它是采样率的一半
+    nyquist = 0.5 * sr
+    
+    # 2. 归一化截止频率 (要求值在 0.0 到 1.0 之间)
+    normal_cutoff = cutoff_freq / nyquist
+    
+    # 防止截止频率设置过高导致归一化后溢出
+    normal_cutoff = np.clip(normal_cutoff, 0.01, 0.99)
+    
+    # 3. 设计一个 5 阶的巴特沃斯滤波器 (阶数越高，过滤边缘越陡峭、越干净利落)
+    b, a = signal.butter(5, normal_cutoff, btype='low', analog=False)
+    
+    # 4. 应用滤波器。使用 filtfilt 可以进行正反向两次滤波，保证波形不发生相位偏移
+    filtered_audio = signal.filtfilt(b, a, audio_series)
+    
+    return filtered_audio
 # 新增：统一处理速度+音高的函数
-def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float) -> np.ndarray:
+def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, sr: int = 22050) -> np.ndarray:
     """
-    先调整音频速度，再调整音高，返回最终处理结果
+    统一音频处理总控函数：根据温度综合调整速度、音高与频域特征。
+    注意：这里新增了 sr (采样率) 参数，因为滤波需要知道采样率。
     """
-    # 第一步：调整速度
-    speed_adjusted = process_audio_speed_by_temp(audio_series, temperature)
-    # 第二步：基于速度调整后的结果，调整音高
-    final_audio = process_audio_pitch_by_temp(speed_adjusted, temperature)
-    # 返回两次处理后的最终结果
-    return final_audio   #返回处理后（改变音速、音高）的音频
+    current_audio = audio_series
+
+    # 1. 温度低于 1.0 (温火煮化)：启动低通滤波器削弱高频
+    if temperature < 1.0:
+        # 建立映射：温度 0.5 时截止频率约为 2500Hz (非常沉闷)，温度 0.9 时约为 6500Hz (略微柔和)
+        # 人类语音的有效能量集中在 300Hz - 3400Hz，保留这一段就能听清内容
+        target_cutoff = 2500 + (temperature - 0.5) * 10000 
+        current_audio = apply_lowpass_filter(current_audio, sr, target_cutoff)
+
+    # 2. 调整速度 (调用你原有的函数，假设你已经修复了上一次的逻辑漏洞)
+    current_audio = process_audio_speed_by_temp(current_audio, temperature)
+    
+    # 3. 调整音高 (调用你原有的函数)
+    current_audio = process_audio_pitch_by_temp(current_audio, temperature)
+    
+    return current_audio   #返回处理后（改变音速、音高）的音频
 
 # ==========================================
 # 【第二部分：绘图逻辑函数】 - 负责后端的“画图”动作

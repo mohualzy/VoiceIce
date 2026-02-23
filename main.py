@@ -27,7 +27,7 @@ if uploaded_file is not None:
         temperature = ui_components.render_controls()
         
         # 调用utils里的算法处理函数
-        y_processed = utils.process_audio_speed_and_pitch(y, temperature)
+        y_processed = utils.process_audio_speed_and_pitch(y, temperature, sr)
         
         # 构建当前记录对象
         current_record = {'name': uploaded_file.name, 'temp': temperature}
