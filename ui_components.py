@@ -3,13 +3,23 @@ import streamlit as st
 import soundfile as sf
 import io  
 import utils # 导入工具箱以调用绘图
+from audio_recorder_streamlit import audio_recorder
 
 def render_sidebar():
     """渲染侧边栏"""
     with st.sidebar:  
         st.header("📂 拾遗冰窖") # 文件存放位置命名得文雅一点❤️
         uploaded_file = st.file_uploader("采撷一段寒语 (wav/mp3)", type=["wav", "mp3"]) # 上传文件存进uploaded_file变量
-        
+        st.divider();
+        st.subheader("🎙️ 现场采音")
+        st.caption("点击麦克风，录制你的即兴心声")
+        # 调用录音组件，录制完成后会返回音频的字节流 (bytes)
+        recorded_audio_bytes = audio_recorder(
+            text="", 
+            recording_color="#FF4500", 
+            neutral_color="#87CEFA", 
+            icon_size="2x"
+        )
         st.divider()  # 分割线
         st.subheader("🗂️ 流年冰迹")  # 历史记录的命名
         
@@ -21,7 +31,7 @@ def render_sidebar():
         else:
             st.caption("惟有风雪立空庭...") # 小文案💖，表示历史记录为空
             
-    return uploaded_file
+    return uploaded_file,uploaded_file
 
 def render_header():
     """渲染主标题区"""
