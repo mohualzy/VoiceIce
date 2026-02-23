@@ -8,32 +8,38 @@ from audio_recorder_streamlit import audio_recorder
 def render_sidebar():
     """渲染侧边栏"""
     with st.sidebar:  
-        st.header("📂 拾遗冰窖") # 文件存放位置命名得文雅一点❤️
-        uploaded_file = st.file_uploader("采撷一段寒语 (wav/mp3)", type=["wav", "mp3"]) # 上传文件存进uploaded_file变量
-        st.divider();
+        st.header("📂 拾遗冰窖") 
+        uploaded_file = st.file_uploader("采撷一段寒语 (wav/mp3)", type=["wav", "mp3"]) 
+        st.divider()
+        
         st.subheader("🎙️ 现场采音")
         st.caption("(点击麦克风开始录音，再次点击结束)")
-        
         recorded_audio_bytes = audio_recorder(
             text=" 录音", 
             recording_color="#FF0000", 
             neutral_color="#808080", 
             icon_size="2x",
-            energy_threshold=(-1.0, 1.0), # 关闭自动静音检测
-            pause_threshold=60.0          # 将最大允许录音时长设为 60 秒
+            energy_threshold=(-1.0, 1.0), 
+            pause_threshold=60.0          
         )
-        st.divider()  # 分割线
-        st.subheader("🗂️ 流年冰迹")  # 历史记录的命名
+        st.divider()  
         
-        # 显示历史记录
-        history = st.session_state.get('history', [])   # 存放历史的一个仓库
-        if history:
-            for idx, record in enumerate(history):   # enumerate函数从容器里取索引和元素
-                st.text(f"❄️ {idx+1}. {record['name']} (Temp: {record['temp']})")  # 音频文件的简要说明
+        st.subheader("🗂️ 流年冰迹")  
+        
+        # 新增交互逻辑：用按钮代替纯文本显示
+        selected_history = None
+        vault = st.session_state.get('audio_vault', {})
+        
+        if vault:
+            for name in vault.keys():
+                # 点击按钮时，捕获当前对应的文件名
+                if st.button(f"❄️ {name}", use_container_width=True):
+                    selected_history = name
         else:
-            st.caption("惟有风雪立空庭...") # 小文案💖，表示历史记录为空
+            st.caption("惟有风雪立空庭...") 
             
-    return uploaded_file, recorded_audio_bytes
+    # 将被点击的历史文件名一并返回
+    return uploaded_file, recorded_audio_bytes, selected_history
 
 def render_header():
     """渲染主标题区"""
