@@ -5,8 +5,8 @@ import io
 import utils # 导入工具箱以调用绘图
 from audio_recorder_streamlit import audio_recorder
 
-def render_sidebar():
-    """渲染侧边栏"""
+def render_sidebar_inputs():
+    """渲染侧边栏：上半部分 (数据输入区)"""
     with st.sidebar:  
         st.header("📂 拾遗冰窖") 
         uploaded_file = st.file_uploader("采撷一段寒语 (wav/mp3)", type=["wav", "mp3"]) 
@@ -22,24 +22,27 @@ def render_sidebar():
             energy_threshold=(-1.0, 1.0), 
             pause_threshold=60.0          
         )
-        st.divider()  
+        st.divider()
         
+    return uploaded_file, recorded_audio_bytes
+
+
+def render_sidebar_history():
+    """渲染侧边栏：下半部分 (历史记录区)"""
+    selected_history = None
+    with st.sidebar:
         st.subheader("🗂️ 流年冰迹")  
         
-        # 新增交互逻辑：用按钮代替纯文本显示
-        selected_history = None
         vault = st.session_state.get('audio_vault', {})
         
         if vault:
             for name in vault.keys():
-                # 点击按钮时，捕获当前对应的文件名
                 if st.button(f"❄️ {name}", use_container_width=True):
                     selected_history = name
         else:
             st.caption("惟有风雪立空庭...") 
             
-    # 将被点击的历史文件名一并返回
-    return uploaded_file, recorded_audio_bytes, selected_history
+    return selected_history
 
 def render_header():
     """渲染主标题区"""
