@@ -36,7 +36,9 @@ def render_sidebar_history():
         vault = st.session_state.get('audio_vault', {})
         
         if vault:
-            for name in vault.keys():
+            # list() 将字典的键提取为有序列表
+            # reversed() 生成一个反向遍历的迭代器
+            for name in reversed(list(vault.keys())):
                 if st.button(f"❄️ {name}", use_container_width=True):
                     selected_history = name
         else:
