@@ -86,13 +86,22 @@ def apply_lowpass_filter(audio_series: np.ndarray, sr: int, cutoff_freq: float) 
     # 防止截止频率设置过高导致归一化后溢出
     normal_cutoff = np.clip(normal_cutoff, 0.01, 0.99)
     
-    # 3. 设计一个 3 阶的巴特沃斯滤波器 (阶数越高，过滤边缘越陡峭、越干净利落)
-    b, a = signal.butter(3, normal_cutoff, btype='low', analog=False)
+    # 3. 设计一个 2 阶的巴特沃斯滤波器 (阶数越高，过滤边缘越陡峭、越干净利落)
+    b, a = signal.butter(2, normal_cutoff, btype='low', analog=False)
     
     # 4. 应用滤波器。使用 filtfilt 可以进行正反向两次滤波，保证波形不发生相位偏移
     filtered_audio = signal.filtfilt(b, a, audio_series)
     
     return filtered_audio
+
+def apply_saturation(audio_series: np.ndarray, drive: float) -> np.ndarray:
+    """
+    【新增算法】软削峰饱和失真 (Soft Clipping Saturation)
+    利用双曲正切函数 tanh，在不爆音的前提下，强行增加谐波能量，模拟"嘶吼感"。
+    """
+    # drive 越大，波形被挤压得越厉害，失真/炽热感越强
+    return np.tanh(audio_series * drive)
+
 # 新增：统一处理速度+音高的函数
 def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, sr: int = 22050) -> np.ndarray:
     """
@@ -101,24 +110,9 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
     """
     current_audio = audio_series
 
-    # 速度: UI的0.5~2.0 映射为真实的 0.85倍速 ~ 1.25倍速
-    real_rate = 1.0 + (temperature - 1.0) * 0.25
-    
-    # 音高: UI的0.5~2.0 映射为真实的 -1.0半音 ~ +1.5半音
+    real_rate = 1.0 + (temperature - 1.0) * 0.25 
     real_pitch = (temperature - 1.0) * 1.5
     
-    # 响度(增益): UI的0.5~2.0 映射为 0.7倍音量 ~ 1.4倍音量
-    gain = 1.0 + (temperature - 1.0) * 0.4
-    
-    # 1. 温度低于 1.0 (温火煮化)：启动低通滤波器削弱高频
-    if temperature < 1.0:
-        # 建立映射：温度 0.5 时截止频率约为 2500Hz (非常沉闷)，温度 0.9 时约为 6500Hz (略微柔和)
-        # 人类语音的有效能量集中在 300Hz - 3400Hz，保留这一段就能听清内容
-        target_cutoff = 4500 + (temperature - 0.5) * 10000 
-        current_audio = apply_lowpass_filter(current_audio, sr, target_cutoff)
-
-    # === 时域与音高处理 ===
-    # 注意：librosa处理过多会损伤音质，这里合并调用并做好异常捕获
     try:
         if real_rate != 1.0:
             current_audio = librosa.effects.time_stretch(y=current_audio, rate=real_rate)
@@ -128,14 +122,27 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
         print(f"DSP引擎处理异常: {e}")
         return audio_series
     
-    # === 响度处理 ===
-    current_audio = current_audio * gain
-    
-    # 防止放大后音频波形溢出(Clipping)，导致爆音
-    current_audio = np.clip(current_audio, -1.0, 1.0)
-    
-    return current_audio   #返回处理后（改变音速、音高）的音频
+    if temperature < 1.0:
+        # 【暴力降温】：针对 Violent 音频
+        # 温度 0.5 时，截止频率暴降至 1200Hz，强行抹除怒吼的共振峰
+        # 温度 0.9 时，截止频率恢复到 6000Hz 左右
+        target_cutoff = 1200 + (temperature - 0.5) * (9600)
+        current_audio = apply_lowpass_filter(current_audio, sr, target_cutoff)
+        
+        # 稍微降低整体音量，配合柔软的听感
+        current_audio = current_audio * (0.8 + (temperature - 0.5) * 0.4)
 
+    elif temperature > 1.0:
+        # 【烈火淬炼】：针对 Soft 音频
+        # 计算过载驱动力 (Drive)：温度越高，Drive 越大 (最高可达 3.0)
+        drive_amount = 1.0 + (temperature - 1.0) * 4.0
+        
+        # 施加饱和失真，无中生有地创造"愤怒的张力"，同时 tanh 天然防爆音
+        current_audio = apply_saturation(current_audio, drive_amount)
+
+    return current_audio
+    
+   
 # ==========================================
 # 【第二部分：绘图逻辑函数】 - 负责后端的“画图”动作
 # ==========================================
