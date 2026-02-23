@@ -35,13 +35,25 @@ elif uploaded_file is not None and uploaded_file.name not in st.session_state['a
     st.session_state['audio_vault'][new_name] = uploaded_file.getvalue()
     st.session_state['current_target'] = new_name
 
-# 4. 渲染侧边栏的历史记录组件 (由于金库已在第二步更新，此时 UI 将精准同步)
-selected_history = ui_components.render_sidebar_history()
+# 4. 渲染侧边栏的历史记录组件 
+selected_history, delete_triggered, files_to_delete = ui_components.render_sidebar_history()
 
 # 补充场景：如果用户点击了历史记录按钮，切换游标
 if selected_history is not None:
     st.session_state['current_target'] = selected_history
-
+    
+if delete_triggered and files_to_delete:
+    for name in files_to_delete:
+        # 1. 内存释放：从字典中彻底删除该键值对
+        if name in st.session_state['audio_vault']:
+            del st.session_state['audio_vault'][name]
+        
+        # 2. 游标安全校验：如果正在播放的文件被删了，必须将游标清空
+        if st.session_state['current_target'] == name:
+            st.session_state['current_target'] = None
+    
+    # 3. 强制页面重载：数据清理完毕后，立刻刷新前端画面
+    st.rerun()
 
 # 5. 渲染主界面并执行底层信号处理
 ui_components.render_header()

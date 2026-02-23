@@ -30,21 +30,39 @@ def render_sidebar_inputs():
 def render_sidebar_history():
     """渲染侧边栏：下半部分 (历史记录区)"""
     selected_history = None
+    delete_triggered = False  # 是否按下了融化按钮
+    files_to_delete = []      # 收集需要融化的文件名
+    
     with st.sidebar:
         st.subheader("🗂️ 流年冰迹")  
-        
         vault = st.session_state.get('audio_vault', {})
         
         if vault:
-            # list() 将字典的键提取为有序列表
-            # reversed() 生成一个反向遍历的迭代器
+            st.caption('"**点击聆听**"')
             for name in reversed(list(vault.keys())):
                 if st.button(f"❄️ {name}", use_container_width=True):
                     selected_history = name
+            
+            st.divider()
+            
+            # --- 新增：多选融化区 ---
+            st.caption('"**融化冰迹**"')
+            files_to_delete = st.multiselect(
+                label="选择文件",
+                options=list(reversed(list(vault.keys()))),
+                default=[],
+                label_visibility="collapsed" # 隐藏多选框自带的标签，保持界面整洁
+            )
+            
+            # 只有当用户确实在多选框里选中了文件时，才显示融化按钮
+            if files_to_delete:
+                if st.button("🔥 确认融化", type="primary", use_container_width=True):
+                    delete_triggered = True
         else:
             st.caption("惟有风雪立空庭...") 
             
-    return selected_history
+    # 将选择信号和删除信号一并传递给主程序状态机
+    return selected_history, delete_triggered, files_to_delete
 
 def render_header():
     """渲染主标题区"""
