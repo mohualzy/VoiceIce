@@ -124,8 +124,7 @@ if target_name and target_name in st.session_state['audio_vault']:
         # 1. 拿到纯净的二进制数据
         raw_bytes = st.session_state['audio_vault'][target_name]
         
-        # 2. 调用缓存函数！
-        # 只要你还在处理同一个音频 (raw_bytes 没变)，滑动温度条时这里将瞬间执行完毕，耗时几乎为 0 毫秒！
+        # 2. 调用缓存函数
         y, sr = load_audio_from_bytes(raw_bytes)
         
         st.markdown(f"**当前聆听:** `{target_name}`")
@@ -133,7 +132,7 @@ if target_name and target_name in st.session_state['audio_vault']:
         # 3. 实时渲染控制区
         temperature = ui_components.render_controls()
         
-        # 4. DSP 引擎处理 (这部分是纯内存 NumPy 矩阵运算，非常快，不需要缓存)
+        # 4. DSP 引擎处理 
         y_processed = utils.process_audio_speed_and_pitch(y, temperature, sr)
         
         ui_components.render_tabs_content(y, y_processed, sr, temperature)

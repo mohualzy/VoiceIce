@@ -4,7 +4,7 @@ import scipy.signal as signal
 import numpy as np
 import matplotlib.pyplot as plt 
 import plotly.graph_objects as go
-# ==========================================
+
 # 【第一部分：核心后端算法】 
 # 核心数值计算库
 def process_audio_speed_by_temp(audio_series: np.ndarray, temperature: float) -> np.ndarray:
@@ -29,7 +29,6 @@ def process_audio_speed_by_temp(audio_series: np.ndarray, temperature: float) ->
     
     # 2. 边界保护: Librosa 要求 rate 必须 > 0
     # 我们设置一个最小速率 0.1 (非常慢) 和最大速率 5.0 (非常快)
-    #np.clip 是numpy的数组裁剪函数，作用是将数
     rate = np.clip(rate, 0.1, 5.0)
     
     # 3. 调用 Librosa 库方法
@@ -56,7 +55,6 @@ def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float) ->
     
     # 2. 调用 Librosa 库方法
     # sr (采样率) 默认为 22050，这是 librosa 加载音频时的默认值。
-    # 如果你的音频不是 22050Hz，这里的音高变化在时间轴上可能会有细微偏差，但不会报错。
     #pitch_shift函数实现音频音高调整
     try:
         processed_data = librosa.effects.pitch_shift(
@@ -103,7 +101,7 @@ def apply_saturation(audio_series: np.ndarray, drive: float) -> np.ndarray:
     # drive 越大，波形被挤压得越厉害，失真/炽热感越强
     return np.tanh(audio_series * drive)
 
-# 新增：统一处理速度+音高的函数
+# 统一处理速度+音高的函数
 def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, sr: int = 22050) -> np.ndarray:
     """
     统一音频处理总控函数：根据温度综合调整速度、音高与频域特征。
@@ -124,9 +122,8 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
         return audio_series
     
     if temperature < 1.0:
-        # 【暴力降温】：针对 Violent 音频
-        # 温度 0.5 时，截止频率暴降至 1200Hz，强行抹除怒吼的共振峰
-        # 温度 0.9 时，截止频率恢复到 6000Hz 左右
+        # 温度 0.5 时，截止频率暴降至 1200Hz
+        # 温度 0.9 时，截止频率恢复到 6000Hz 
         target_cutoff = 1200 + (temperature - 0.5) * (9600)
         current_audio = apply_lowpass_filter(current_audio, sr, target_cutoff)
         
@@ -143,10 +140,7 @@ def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, 
 
     return current_audio
     
-   
-# ==========================================
 # 【第二部分：绘图逻辑函数】 - 负责后端的“画图”动作
-# ==========================================
 
 def draw_waveform_plotly(y: np.ndarray, sr: int, title: str, color: str):
     """
@@ -198,7 +192,7 @@ def draw_spectrogram(y, sr, title):
     plt.style.use('default')  # 重置绘图样式
     fig, ax = plt.subplots(figsize=(10, 3))
     
-    stft_result = librosa.stft(y)  #将音频从（幅度随时间变化）转换为（频率随时间变化）
+    stft_result = librosa.stft(y)  #将音频从幅度随时间变化转换为频率随时间变化
     
     db_data = librosa.amplitude_to_db(np.abs(stft_result), ref=np.max)
     
@@ -214,9 +208,3 @@ def draw_spectrogram(y, sr, title):
     fig.colorbar(img, ax=ax, format="%+2.f dB", shrink=0.8) #添加颜色条，解释声谱图中颜色与分贝值的对应关系
     plt.tight_layout()
     return fig
-
-# 首先，np.abs(stft_result) 计算短时傅里叶变换（STFT）结果的幅值谱，因为 STFT 结果是复数矩阵，幅值反映了每个时间和频率点上的能量强度。然后，librosa.amplitude_to_db 函数将这些幅值数据转换为分贝刻度。分贝是一种对数单位，更符合人耳对声音强度的感知。
-
-# 参数 ref=np.max 表示以幅值中的最大值作为参考点，转换后的分贝值会以最大幅值为 0 dB，其他值相对于最大值进行缩放。这种处理方式有助于在可视化声谱图时突出能量的相对分布，使得弱信号和强信号都能清晰显示。
-
-# 最终，db_data 就是可以直接用于声谱图绘制的分贝数据矩阵。
