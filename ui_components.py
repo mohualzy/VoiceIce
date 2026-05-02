@@ -87,10 +87,25 @@ def render_controls():
     
     return temperature
 
-def render_analysis_report(temperature):
+def render_analysis_report(temperature, y_original=None, sr=None):
     """分析报告UI"""
     st.header("📊 情感手札")
-    # 简单的模拟算法
+
+    if y_original is not None and sr is not None:
+        acoustic_report = utils.analyze_emotion_features(y_original, sr)
+
+        st.subheader("🧊 原声诊断")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("RMS 能量", f"{acoustic_report['rms']:.4f}")
+        a2.metric("过零率 ZCR", f"{acoustic_report['zcr']:.4f}")
+        a3.metric("情绪倾向", acoustic_report["emotion"])
+
+        mfcc_preview = ", ".join(f"{value:.2f}" for value in acoustic_report["mfcc_mean"][:5])
+        st.caption(f"MFCC 前13维均值（前5维预览）：{mfcc_preview} ...")
+        st.divider()
+
+    st.subheader("🔥 处理后预测")
+    # 基于温度参数的处理后预测
     aggression = max(0, 80 * (temperature - 0.8))
     calmness = max(0, 100 - aggression)
     
@@ -103,9 +118,9 @@ def render_analysis_report(temperature):
     st.info(f"💡 解语：{msg}")
 
 def render_tabs_content(y_original, y_processed, sr, temperature):
-    """渲染底部的三个标签页内容"""
+    """渲染底部的标签页内容"""
     st.divider()
-    tab1, tab2, tab3 = st.tabs(["🌊 见字如面", "🔬 闻声绘影", "📝 解语手札"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🌊 见字如面", "🔬 闻声绘影", "📝 解语手札", "🌡️ 情绪温度"])
 
     # --- Tab 1: 波形 ---
     with tab1:
@@ -128,6 +143,18 @@ def render_tabs_content(y_original, y_processed, sr, temperature):
             sf.write(virtual_file, y_processed, sr, format='WAV')
             st.audio(virtual_file, format='audio/wav')
 
+        f0_c1, f0_c2 = st.columns(2)
+        with f0_c1:
+            st.plotly_chart(
+                utils.draw_f0_curve(y_original, sr, "原声音调轨迹", "#87CEFA"),
+                use_container_width=True
+            )
+        with f0_c2:
+            st.plotly_chart(
+                utils.draw_f0_curve(y_processed, sr, "处理后音调轨迹", plot_color),
+                use_container_width=True
+            )
+
     # --- Tab 2: 声谱 ---
     with tab2:
         c3, c4 = st.columns(2)
@@ -138,4 +165,14 @@ def render_tabs_content(y_original, y_processed, sr, temperature):
 
     # --- Tab 3: 总结 ---
     with tab3:
-        render_analysis_report(temperature)
+        render_analysis_report(temperature, y_original, sr)
+
+    # --- Tab 4: 情绪温度 ---
+    with tab4:
+        timeline_fig = utils.draw_emotion_timeline(y_original, sr)
+        st.plotly_chart(timeline_fig, use_container_width=True)
+
+        timeline_meta = timeline_fig.layout.meta or {}
+        peak_time = timeline_meta.get("peak_time", 0.0)
+        peak_intensity = timeline_meta.get("peak_intensity", 0.0)
+        st.caption(f"峰值时间点：{peak_time:.2f}s（激烈度 {peak_intensity:.2f}）")

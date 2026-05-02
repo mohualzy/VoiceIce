@@ -41,7 +41,7 @@ def process_audio_speed_by_temp(audio_series: np.ndarray, temperature: float) ->
      #try异常处理,except捕获异常并处理
     return processed_data
 
-def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float) -> np.ndarray:
+def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float, sr: int) -> np.ndarray:
     """
     根据温度调整音频音高 (Pitch Shift)。
     温度越高，音调越高。
@@ -54,12 +54,12 @@ def process_audio_pitch_by_temp(audio_series: np.ndarray, temperature: float) ->
         return audio_series
     
     # 2. 调用 Librosa 库方法
-    # sr (采样率) 默认为 22050，这是 librosa 加载音频时的默认值。
+    # sr 必须来自当前音频，避免不同采样率文件被硬编码成 22050Hz。
     #pitch_shift函数实现音频音高调整
     try:
         processed_data = librosa.effects.pitch_shift(
-            y=audio_series, 
-            sr=22050, 
+            y=audio_series,
+            sr=sr,
             n_steps=n_steps
         )
     except Exception as e:
@@ -100,6 +100,43 @@ def apply_saturation(audio_series: np.ndarray, drive: float) -> np.ndarray:
     """
     # drive 越大，波形被挤压得越厉害，失真/炽热感越强
     return np.tanh(audio_series * drive)
+
+def analyze_emotion_features(y: np.ndarray, sr: int) -> dict:
+    """
+    基于原声音频的真实声学特征做轻量情绪诊断。
+    返回 RMS、ZCR、MFCC 均值以及规则判断出的情绪倾向。
+    """
+    audio_series = np.asarray(y, dtype=float).ravel()
+
+    if audio_series.size == 0:
+        return {
+            "rms": 0.0,
+            "zcr": 0.0,
+            "mfcc_mean": [0.0] * 13,
+            "emotion": "平静"
+        }
+
+    rms_values = librosa.feature.rms(y=audio_series)
+    zcr_values = librosa.feature.zero_crossing_rate(y=audio_series)
+    mfcc_values = librosa.feature.mfcc(y=audio_series, sr=sr, n_mfcc=13)
+
+    rms_mean = float(np.mean(rms_values))
+    zcr_mean = float(np.mean(zcr_values))
+    mfcc_mean = np.mean(mfcc_values, axis=1).astype(float).tolist()
+
+    if rms_mean > 0.05 and zcr_mean > 0.1:
+        emotion = "激烈"
+    elif rms_mean < 0.02:
+        emotion = "平静"
+    else:
+        emotion = "中性"
+
+    return {
+        "rms": rms_mean,
+        "zcr": zcr_mean,
+        "mfcc_mean": mfcc_mean,
+        "emotion": emotion
+    }
 
 # 统一处理速度+音高的函数
 def process_audio_speed_and_pitch(audio_series: np.ndarray, temperature: float, sr: int = 22050) -> np.ndarray:
@@ -185,6 +222,143 @@ def draw_waveform_plotly(y: np.ndarray, sr: int, title: str, color: str):
     # 锁定 Y 轴振幅的物理边界，防止拖动温度时波形图忽大忽小
     fig.update_yaxes(range=[-1.0, 1.0])
     
+    return fig
+
+def draw_f0_curve(y: np.ndarray, sr: int, title: str, color: str):
+    """
+    使用 librosa.pyin 提取基频 F0，并绘制随时间变化的音调轨迹。
+    """
+    audio_series = np.asarray(y, dtype=float).ravel()
+    fig = go.Figure()
+
+    if audio_series.size > 0:
+        try:
+            fmin = librosa.note_to_hz("C2")
+            fmax = min(librosa.note_to_hz("C7"), sr / 2 - 1)
+            f0, _, _ = librosa.pyin(audio_series, fmin=fmin, fmax=fmax, sr=sr)
+            time_axis = librosa.times_like(f0, sr=sr)
+            voiced_mask = np.isfinite(f0)
+
+            fig.add_trace(go.Scatter(
+                x=time_axis[voiced_mask],
+                y=f0[voiced_mask],
+                mode="lines",
+                line=dict(color=color, width=1.8),
+                name="F0"
+            ))
+        except Exception as e:
+            print(f"F0 提取出错: {e}")
+
+    fig.update_layout(
+        title=dict(text=title, font=dict(size=14)),
+        xaxis_title="Time (s)",
+        yaxis_title="F0 (Hz)",
+        height=220,
+        margin=dict(l=10, r=10, t=40, b=10),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)"
+    )
+
+    return fig
+
+def _emotion_color(intensity: float, alpha: float = 0.45) -> str:
+    """将 0-1 激烈度映射为蓝到红的 RGBA 颜色。"""
+    value = float(np.clip(intensity, 0.0, 1.0))
+    blue = np.array([65, 135, 245])
+    red = np.array([240, 70, 70])
+    rgb = (blue + (red - blue) * value).astype(int)
+    return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha})"
+
+def draw_emotion_timeline(y: np.ndarray, sr: int):
+    """
+    将音频按 0.5 秒分帧，绘制原声的情绪激烈度时间线。
+    """
+    audio_series = np.asarray(y, dtype=float).ravel()
+    frame_length = max(1, int(sr * 0.5))
+    fig = go.Figure()
+
+    if audio_series.size == 0:
+        fig.update_layout(meta={"peak_time": 0.0, "peak_intensity": 0.0})
+        return fig
+
+    times = []
+    intensities = []
+    duration = audio_series.size / sr
+
+    for start in range(0, audio_series.size, frame_length):
+        end = min(start + frame_length, audio_series.size)
+        frame = audio_series[start:end]
+
+        if frame.size == 0:
+            continue
+
+        rms_value = float(librosa.feature.rms(
+            y=frame,
+            frame_length=frame.size,
+            hop_length=frame.size,
+            center=False
+        )[0, 0])
+
+        if frame.size > 1:
+            zcr_value = float(librosa.feature.zero_crossing_rate(
+                y=frame,
+                frame_length=frame.size,
+                hop_length=frame.size,
+                center=False
+            )[0, 0])
+        else:
+            zcr_value = 0.0
+
+        rms_score = np.clip(rms_value / 0.05, 0.0, 1.0)
+        zcr_score = np.clip(zcr_value / 0.1, 0.0, 1.0)
+        intensity = float(np.clip((rms_score + zcr_score) / 2.0, 0.0, 1.0))
+
+        frame_mid = (start + (end - start) / 2) / sr
+        times.append(frame_mid)
+        intensities.append(intensity)
+
+        fig.add_trace(go.Scatter(
+            x=[start / sr, end / sr],
+            y=[intensity, intensity],
+            mode="lines",
+            line=dict(color=_emotion_color(intensity, 0.95), width=0.5),
+            fill="tozeroy",
+            fillcolor=_emotion_color(intensity, 0.42),
+            hovertemplate="Time: %{x:.2f}s<br>Intensity: %{y:.2f}<extra></extra>",
+            showlegend=False
+        ))
+
+    if intensities:
+        peak_index = int(np.argmax(intensities))
+        peak_time = float(times[peak_index])
+        peak_intensity = float(intensities[peak_index])
+
+        fig.add_trace(go.Scatter(
+            x=times,
+            y=intensities,
+            mode="lines+markers",
+            line=dict(color="rgba(30, 30, 30, 0.65)", width=1.5),
+            marker=dict(size=5, color=[_emotion_color(v, 0.95) for v in intensities]),
+            name="Intensity",
+            showlegend=False
+        ))
+    else:
+        peak_time = 0.0
+        peak_intensity = 0.0
+
+    fig.update_layout(
+        title=dict(text="原声情绪温度", font=dict(size=14)),
+        xaxis_title="Time (s)",
+        yaxis_title="Intensity",
+        height=300,
+        margin=dict(l=10, r=10, t=40, b=10),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        meta={"peak_time": peak_time, "peak_intensity": peak_intensity}
+    )
+    fig.update_xaxes(range=[0, duration])
+    fig.update_yaxes(range=[0, 1])
+
     return fig
 
 def draw_spectrogram(y, sr, title):
